@@ -1,12 +1,61 @@
 import json
 import os
+import logging
 from google import genai
 from dotenv import load_dotenv
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
+RFP_TEXT_MAX_CHARS = 8000
+
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL_NAME = "gemini-2.0-flash"
+# Try models in order of preference (fallback chain)
+MODEL_CANDIDATES = [
+    "gemini-2.0-flash",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-2.5-flash-lite",
+]
+
+
+def _generate_with_fallback(prompt: str) -> str:
+    """Try multiple Gemini models in order, falling back on quota/auth errors."""
+    last_error = None
+    for model_name in MODEL_CANDIDATES:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+            )
+            return response.text.strip()
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+            # Retry on quota/rate-limit errors
+            if "429" in error_str or "resource_exhausted" in error_str or "quota" in error_str:
+                logger.warning(f"Model {model_name} quota exhausted, trying next...")
+                continue
+            # Retry on auth/forbidden errors
+            if "403" in error_str or "forbidden" in error_str:
+                logger.warning(f"Model {model_name} forbidden, trying next...")
+                continue
+            # Retry on not-found errors (model doesn't exist)
+            if "404" in error_str or "not found" in error_str:
+                logger.warning(f"Model {model_name} not found, trying next...")
+                continue
+            # Retry on server overloaded / unavailable
+            if "503" in error_str or "unavailable" in error_str or "high demand" in error_str:
+                logger.warning(f"Model {model_name} unavailable (overloaded), trying next...")
+                continue
+            # For other errors, raise immediately
+            raise
+
+    # All models failed
+    raise RuntimeError(
+        f"All Gemini models exhausted (tried {', '.join(MODEL_CANDIDATES)}). Last error: {last_error}"
+    )
 
 
 def extract_requirements_and_entities(text: str) -> dict:
@@ -15,6 +64,7 @@ def extract_requirements_and_entities(text: str) -> dict:
 
 Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 {{
+  "project_name": "extracted project or system name",
   "requirements": [
     {{
       "text": "requirement description",
@@ -27,6 +77,7 @@ Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 }}
 
 Rules:
+- Extract the project/system name from the document title or first paragraph
 - Extract ALL requirements mentioned in the document
 - Classify each as compliance, technical, or experience
 - Extract dates/deadlines exactly as stated
@@ -35,13 +86,9 @@ Rules:
 - If information is missing, use "Not specified"
 
 RFP Document Text:
-{text[:8000]}"""
+{text[:RFP_TEXT_MAX_CHARS]}"""
 
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=prompt,
-    )
-    raw = response.text.strip()
+    raw = _generate_with_fallback(prompt)
 
     # Clean markdown fences if present
     if raw.startswith("```"):
@@ -101,8 +148,4 @@ Strong closing statement with value proposition and next steps.
 
 Write in professional business English. Be specific and reference the actual requirements and matches provided. Do not use placeholder text."""
 
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=prompt,
-    )
-    return response.text.strip()
+    return _generate_with_fallback(prompt)

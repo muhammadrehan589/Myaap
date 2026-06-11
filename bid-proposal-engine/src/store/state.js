@@ -1,6 +1,12 @@
 import { reactive } from 'vue'
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = 'http://localhost:8001'
+const DEFAULT_COMPANY_NAME = 'TechCorp Solutions'
+const DEFAULT_STATUS = 'Under Review'
+const DEFAULT_AGENCY = 'Auto-detected'
+const CAPABILITY_SCORE_OFFSET = 10
+const EXPERIENCE_SCORE_OFFSET = 5
+const DEFAULT_BUDGET_FIT = 85
 
 const state = reactive({
   uploadedFile: null,
@@ -14,50 +20,49 @@ const state = reactive({
   proposal: null,
 })
 
+/**
+ * Shared fetch wrapper with error handling.
+ * Eliminates duplicated try/catch + response parsing across all API calls.
+ */
+async function apiFetch(endpoint, options = {}) {
+  let res
+  try {
+    res = await fetch(`${API_BASE}${endpoint}`, options)
+  } catch (e) {
+    throw new Error(`Cannot connect to backend at ${API_BASE}. Is the server running? (${e.message})`)
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(`${endpoint} failed: ${err.detail || res.statusText}`)
+  }
+  return res.json()
+}
+
 export function useAppStore() {
-  function setUploadedFile(file) {
-    state.uploadedFile = file
-  }
-
-  function setUploading(val) {
-    state.isUploading = val
-  }
-
-  function setAnalyzing(val) {
-    state.isAnalyzing = val
-  }
-
   async function uploadFile(file) {
     const formData = new FormData()
     formData.append('file', file)
 
-    const res = await fetch(`${API_BASE}/upload-rfp`, {
-      method: 'POST',
-      body: formData,
-    })
-    if (!res.ok) throw new Error('Upload failed')
-    const data = await res.json()
+    const data = await apiFetch('/upload-rfp', { method: 'POST', body: formData })
     state.workspaceId = data.workspace_id
     state.uploadedFile = file
     return data
   }
 
   async function extractRequirements() {
-    const res = await fetch(`${API_BASE}/extract-requirements`, {
+    const data = await apiFetch('/extract-requirements', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ workspace_id: state.workspaceId }),
     })
-    if (!res.ok) throw new Error('Extraction failed')
-    const data = await res.json()
 
     state.rfpData = {
-      name: 'Hospital Management System',
+      name: data.project_name || 'Untitled RFP',
       deadline: data.deadlines || 'Not specified',
       budget: data.budget || 'Not specified',
-      status: 'Under Review',
-      agency: 'Auto-detected',
-      submittedBy: 'TechCorp Solutions',
+      status: DEFAULT_STATUS,
+      agency: DEFAULT_AGENCY,
+      submittedBy: DEFAULT_COMPANY_NAME,
       rfpNumber: `RFP-${state.workspaceId.slice(0, 8).toUpperCase()}`,
     }
 
@@ -73,15 +78,12 @@ export function useAppStore() {
 
   async function runComplianceCheck() {
     const reqTexts = state.requirements.map(r => r.requirement)
-    const res = await fetch(`${API_BASE}/compliance-check`, {
+    const data = await apiFetch('/compliance-check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ requirements: reqTexts }),
     })
-    if (!res.ok) throw new Error('Compliance check failed')
-    const data = await res.json()
 
-    // Update requirement statuses
     state.requirements = state.requirements.map((r, i) => ({
       ...r,
       status: data.results[i]?.status || 'PENDING',
@@ -100,33 +102,28 @@ export function useAppStore() {
 
   async function runCapabilityMatch() {
     const reqTexts = state.requirements.map(r => r.requirement)
-    const res = await fetch(`${API_BASE}/retrieve-capabilities`, {
+    return apiFetch('/retrieve-capabilities', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ requirements: reqTexts }),
     })
-    if (!res.ok) throw new Error('Capability matching failed')
-    return await res.json()
   }
 
   async function calculateWinScore() {
     const complianceScore = state.compliance?.score || 0
-    const capabilityScore = Math.min(100, complianceScore + 10)
-    const experienceScore = Math.min(100, complianceScore + 5)
-    const budgetFit = 85
+    const capabilityScore = Math.min(100, complianceScore + CAPABILITY_SCORE_OFFSET)
+    const experienceScore = Math.min(100, complianceScore + EXPERIENCE_SCORE_OFFSET)
 
-    const res = await fetch(`${API_BASE}/score`, {
+    const data = await apiFetch('/score', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         compliance_score: complianceScore,
         capability_score: capabilityScore,
         experience_score: experienceScore,
-        budget_fit: budgetFit,
+        budget_fit: DEFAULT_BUDGET_FIT,
       }),
     })
-    if (!res.ok) throw new Error('Scoring failed')
-    const data = await res.json()
 
     state.winScore = {
       score: data.win_probability,
@@ -135,7 +132,7 @@ export function useAppStore() {
         { name: 'Compliance', score: complianceScore },
         { name: 'Technical Fit', score: capabilityScore },
         { name: 'Past Performance', score: experienceScore },
-        { name: 'Price Competitiveness', score: budgetFit },
+        { name: 'Price Competitiveness', score: DEFAULT_BUDGET_FIT },
         { name: 'Team Qualification', score: Math.round((capabilityScore + experienceScore) / 2) },
       ],
     }
@@ -144,13 +141,11 @@ export function useAppStore() {
   }
 
   async function generateProposal() {
-    const res = await fetch(`${API_BASE}/generate-proposal`, {
+    const data = await apiFetch('/generate-proposal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ workspace_id: state.workspaceId }),
     })
-    if (!res.ok) throw new Error('Proposal generation failed')
-    const data = await res.json()
 
     // Parse the proposal text into sections
     const raw = data.proposal
@@ -172,7 +167,7 @@ export function useAppStore() {
 
     state.proposal = {
       title: state.rfpData?.name || 'AI Generated Proposal',
-      subtitle: `Submitted by ${state.rfpData?.submittedBy || 'TechCorp Solutions'}`,
+      subtitle: `Submitted by ${state.rfpData?.submittedBy || DEFAULT_COMPANY_NAME}`,
       date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
       sections,
     }
@@ -182,12 +177,12 @@ export function useAppStore() {
 
   async function runFullPipeline(file) {
     // Step 1: Upload
-    setUploading(true)
+    state.isUploading = true
     await uploadFile(file)
-    setUploading(false)
+    state.isUploading = false
 
     // Step 2: Extract
-    setAnalyzing(true)
+    state.isAnalyzing = true
     await extractRequirements()
 
     // Step 3: Compliance + RAG
@@ -196,7 +191,7 @@ export function useAppStore() {
 
     // Step 4: Win score
     await calculateWinScore()
-    setAnalyzing(false)
+    state.isAnalyzing = false
   }
 
   function resetState() {
@@ -213,9 +208,6 @@ export function useAppStore() {
 
   return {
     state,
-    setUploadedFile,
-    setUploading,
-    setAnalyzing,
     uploadFile,
     extractRequirements,
     runComplianceCheck,

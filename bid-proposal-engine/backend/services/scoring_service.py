@@ -41,6 +41,13 @@ def _get_historical_stats() -> dict:
     }
 
 
+WEIGHT_COMPLIANCE = 0.4
+WEIGHT_CAPABILITY = 0.3
+WEIGHT_EXPERIENCE = 0.2
+WEIGHT_BUDGET_FIT = 0.1
+WIN_PROBABILITY_THRESHOLD = 70
+
+
 def calculate_win_probability(
     compliance_score: float,
     capability_score: float,
@@ -50,23 +57,24 @@ def calculate_win_probability(
     """Calculate win probability using the mandated weighted formula.
 
     Formula:
-        win_probability = 0.4 * compliance + 0.3 * capability + 0.2 * experience + 0.1 * budget_fit
+        win_probability = W_COMPLIANCE * compliance + W_CAPABILITY * capability
+                        + W_EXPERIENCE * experience + W_BUDGET * budget_fit
 
     Decision:
-        >= 70 → GO
-        < 70  → NO-GO
+        >= WIN_PROBABILITY_THRESHOLD → GO
+        < WIN_PROBABILITY_THRESHOLD  → NO-GO
 
     Enriched with historical bid statistics from the dataset.
     """
     win_probability = (
-        (0.4 * compliance_score)
-        + (0.3 * capability_score)
-        + (0.2 * experience_score)
-        + (0.1 * budget_fit)
+        (WEIGHT_COMPLIANCE * compliance_score)
+        + (WEIGHT_CAPABILITY * capability_score)
+        + (WEIGHT_EXPERIENCE * experience_score)
+        + (WEIGHT_BUDGET_FIT * budget_fit)
     )
     win_probability = round(win_probability, 1)
 
-    decision = "GO" if win_probability >= 70 else "NO-GO"
+    decision = "GO" if win_probability >= WIN_PROBABILITY_THRESHOLD else "NO-GO"
 
     # Enrich with historical context
     stats = _get_historical_stats()

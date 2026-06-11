@@ -1,4 +1,5 @@
 import os
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from services.pdf_service import extract_text_from_pdf
@@ -6,6 +7,7 @@ from services.llm_service import extract_requirements_and_entities, generate_pro
 from services.rag_service import retrieve_matches
 from services.compliance_service import check_compliance
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -24,22 +26,22 @@ async def generate_proposal_endpoint(req: ProposalRequest):
     if not files:
         raise HTTPException(status_code=404, detail="No file found in workspace")
 
-    # Step 1: Extract text and requirements
     filename = files[0]
     text = extract_text_from_pdf(req.workspace_id, filename)
     if not text:
         raise HTTPException(status_code=422, detail="Could not extract text from document")
 
-    extracted = extract_requirements_and_entities(text)
+    try:
+        extracted = extract_requirements_and_entities(text)
+    except RuntimeError as e:
+        logger.error(f"AI extraction failed: {e}")
+        raise HTTPException(status_code=503, detail=f"AI service unavailable: {str(e)}")
+
     requirement_texts = [r["text"] for r in extracted.get("requirements", [])]
 
-    # Step 2: RAG capability matching
     rag_matches = retrieve_matches(requirement_texts)
-
-    # Step 3: Compliance check
     compliance = check_compliance(requirement_texts, rag_matches)
 
-    # Step 4: Generate proposal with full context
     context = {
         "requirements": extracted.get("requirements", []),
         "capability_matches": rag_matches,
@@ -48,5 +50,10 @@ async def generate_proposal_endpoint(req: ProposalRequest):
         "deadlines": extracted.get("deadlines", "Not specified"),
     }
 
-    proposal_text = generate_proposal(context)
+    try:
+        proposal_text = generate_proposal(context)
+    except RuntimeError as e:
+        logger.error(f"AI proposal generation failed: {e}")
+        raise HTTPException(status_code=503, detail=f"AI service unavailable: {str(e)}")
+
     return {"proposal": proposal_text}

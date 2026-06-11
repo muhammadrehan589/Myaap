@@ -1,9 +1,11 @@
 import os
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from services.pdf_service import extract_text_from_pdf
 from services.llm_service import extract_requirements_and_entities
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -18,7 +20,6 @@ async def extract_requirements(req: ExtractRequest):
     if not os.path.exists(workspace_dir):
         raise HTTPException(status_code=404, detail="Workspace not found")
 
-    # Find the uploaded file
     files = os.listdir(workspace_dir)
     if not files:
         raise HTTPException(status_code=404, detail="No file found in workspace")
@@ -29,5 +30,15 @@ async def extract_requirements(req: ExtractRequest):
     if not text:
         raise HTTPException(status_code=422, detail="Could not extract text from document")
 
-    result = extract_requirements_and_entities(text)
-    return result
+    try:
+        result = extract_requirements_and_entities(text)
+        return result
+    except RuntimeError as e:
+        logger.error(f"AI extraction failed: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"AI service unavailable: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Extraction error: {e}")
+        raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
