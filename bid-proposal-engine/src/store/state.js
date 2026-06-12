@@ -66,22 +66,36 @@ export function useAppStore() {
       rfpNumber: `RFP-${state.workspaceId.slice(0, 8).toUpperCase()}`,
     }
 
-    state.requirements = (data.requirements || []).map((r, i) => ({
+    // Combine mandatory and preferred requirements
+    const mandatory = (data.mandatory_requirements || []).map((r, i) => ({
       id: i + 1,
       requirement: r.text,
-      type: r.type,
+      type: r.type || 'compliance',
+      priority: 'mandatory',
       status: 'PENDING',
     }))
+
+    const preferred = (data.preferred_requirements || []).map((r, i) => ({
+      id: mandatory.length + i + 1,
+      requirement: r.text,
+      type: r.type || 'technical',
+      priority: 'preferred',
+      status: 'PENDING',
+    }))
+
+    state.requirements = [...mandatory, ...preferred]
 
     return data
   }
 
   async function runComplianceCheck() {
-    const reqTexts = state.requirements.map(r => r.requirement)
+    const mandatory = state.requirements.filter(r => r.priority === 'mandatory').map(r => r.requirement)
+    const preferred = state.requirements.filter(r => r.priority === 'preferred').map(r => r.requirement)
+
     const data = await apiFetch('/compliance-check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requirements: reqTexts }),
+      body: JSON.stringify({ mandatory_requirements: mandatory, preferred_requirements: preferred }),
     })
 
     state.requirements = state.requirements.map((r, i) => ({
@@ -90,11 +104,12 @@ export function useAppStore() {
     }))
 
     state.compliance = {
-      total: data.total,
-      passed: data.passed,
-      failed: data.failed,
+      total: data.total_mandatory || mandatory.length,
+      passed: data.pass || 0,
+      partial: data.partial || 0,
+      failed: data.fail || 0,
       pending: state.requirements.filter(r => r.status === 'PENDING').length,
-      score: data.score,
+      score: data.score || 0,
     }
 
     return data
@@ -147,22 +162,37 @@ export function useAppStore() {
       body: JSON.stringify({ workspace_id: state.workspaceId }),
     })
 
-    // Parse the proposal text into sections
-    const raw = data.proposal
+    // Backend now returns structured JSON proposal
+    const proposalData = data.proposal?.proposal || data.proposal
     const sections = []
-    const sectionRegex = /(?:^|\n)(?:\d+\.\s*)?([A-Z][A-Z\s&]+?)(?:\n|=+\n)([\s\S]*?)(?=\n(?:\d+\.\s*)?[A-Z][A-Z\s&]+?(?:\n|=+\n)|$)/g
-    let match
-    while ((match = sectionRegex.exec(raw)) !== null) {
-      const heading = match[1].trim()
-      const content = match[2].trim()
-      if (heading && content) {
-        sections.push({ heading, content })
-      }
+
+    // Map JSON sections to display format
+    if (proposalData.executive_summary) {
+      sections.push({ heading: 'Executive Summary', content: proposalData.executive_summary })
+    }
+    if (proposalData.technical_approach) {
+      sections.push({ heading: 'Technical Approach', content: proposalData.technical_approach })
+    }
+    if (proposalData.company_experience && proposalData.company_experience.length > 0) {
+      // Format company experience as readable text
+      const expText = proposalData.company_experience.map((exp, i) => {
+        return `[${exp.cap_id}] ${exp.domain}\n${exp.project_summary}\nCertification: ${exp.certification} | Client: ${exp.client_type} | Year: ${exp.year_completed}`
+      }).join('\n\n')
+      sections.push({ heading: 'Company Experience', content: expText })
+    }
+    if (proposalData.compliance_mapping && proposalData.compliance_mapping.length > 0) {
+      const compText = proposalData.compliance_mapping.map(c => {
+        return `${c.requirement}\nStatus: ${c.status}\nEvidence: ${c.evidence}`
+      }).join('\n\n')
+      sections.push({ heading: 'Compliance Mapping', content: compText })
+    }
+    if (proposalData.conclusion) {
+      sections.push({ heading: 'Conclusion', content: proposalData.conclusion })
     }
 
-    // Fallback: if parsing fails, use raw text as single section
+    // Fallback if no sections parsed
     if (sections.length === 0) {
-      sections.push({ heading: 'AI Generated Proposal', content: raw })
+      sections.push({ heading: 'AI Generated Proposal', content: JSON.stringify(proposalData, null, 2) })
     }
 
     state.proposal = {
@@ -170,6 +200,8 @@ export function useAppStore() {
       subtitle: `Submitted by ${state.rfpData?.submittedBy || DEFAULT_COMPANY_NAME}`,
       date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
       sections,
+      grounding_report: data.grounding_report,
+      win_score: data.win_score,
     }
 
     return data

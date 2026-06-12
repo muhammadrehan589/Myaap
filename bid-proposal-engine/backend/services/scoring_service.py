@@ -1,92 +1,183 @@
-"""Win Probability Service — Dataset-driven scoring using Bid History.
+"""Win Probability Service — Procurement intelligence scoring.
 
-Uses historical bid records from the Excel workbook to derive:
-- Historical win rate
-- Average compliance % of winning bids
-- Average score of winning bids
-- Budget-fit analysis
+Deterministic, explainable scoring using compliance results + capability data.
 
-Combined with the mandated weighted formula for final prediction.
+Scoring model:
+    base_score = 0.60 * mandatory_score
+               + 0.20 * capability_coverage
+               + 0.20 * historical_fit
+
+Rules:
+- If any value is missing → treat as 0
+- Never output null or undefined
+- Clamp result between 0 and 100
+
+Decision tiers:
+    > 70 → GO
+    40-70 → CONDITIONAL GO
+    < 40 → NO-GO
+
+Dependency Rule: This service does NOT import dataset_service directly.
+All data is injected via function parameters by the route layer.
 """
 
-from services.dataset_service import get_bid_history
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Mandated weights — sum to 1.0
+WEIGHT_MANDATORY = 0.60
+WEIGHT_CAPABILITY = 0.20
+WEIGHT_HISTORICAL = 0.20
+
+# Decision thresholds
+THRESHOLD_GO = 70
+THRESHOLD_CONDITIONAL = 40
 
 
-def _get_historical_stats() -> dict:
-    """Compute statistics from the Bid History sheet."""
-    bids = get_bid_history()
-
-    wins = [b for b in bids if b["outcome"] == "Win"]
-    losses = [b for b in bids if b["outcome"] == "Loss"]
-
-    win_rate = len(wins) / len(bids) * 100 if bids else 0
-
-    avg_win_score = sum(b["score_pct"] for b in wins) / len(wins) if wins else 0
-    avg_win_compliance = sum(b["compliance_pct"] for b in wins) / len(wins) if wins else 0
-    avg_win_gaps = sum(b["gaps_found"] for b in wins) / len(wins) if wins else 0
-
-    avg_loss_score = sum(b["score_pct"] for b in losses) / len(losses) if losses else 0
-    avg_loss_compliance = sum(b["compliance_pct"] for b in losses) / len(losses) if losses else 0
-
-    return {
-        "total_bids": len(bids),
-        "total_wins": len(wins),
-        "total_losses": len(losses),
-        "win_rate": round(win_rate, 1),
-        "avg_win_score": round(avg_win_score, 1),
-        "avg_win_compliance": round(avg_win_compliance, 1),
-        "avg_win_gaps": round(avg_win_gaps, 1),
-        "avg_loss_score": round(avg_loss_score, 1),
-        "avg_loss_compliance": round(avg_loss_compliance, 1),
-    }
+def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
+    """Constrain a score to the valid 0-100 range. Never returns NaN."""
+    if value is None or value != value:  # NaN check
+        return 0.0
+    return max(low, min(high, value))
 
 
-WEIGHT_COMPLIANCE = 0.4
-WEIGHT_CAPABILITY = 0.3
-WEIGHT_EXPERIENCE = 0.2
-WEIGHT_BUDGET_FIT = 0.1
-WIN_PROBABILITY_THRESHOLD = 70
+def _compute_capability_coverage(rag_matches: list[dict]) -> tuple[float, str]:
+    """Compute capability coverage based on match quality.
+
+    Measures what percentage of requirements have at least a PARTIAL match.
+    """
+    if not rag_matches:
+        return 0.0, "No RAG matches available"
+
+    total = len(rag_matches)
+    matched = sum(1 for m in rag_matches if m.get("best_score", m.get("score", 0)) >= 0.50)
+
+    coverage = (matched / total) * 100 if total > 0 else 0.0
+
+    return _clamp(coverage), (
+        f"{matched}/{total} requirements have PARTIAL+ match"
+    )
+
+
+def _compute_historical_fit(capabilities: list[dict], rag_matches: list[dict]) -> tuple[float, str]:
+    """Compute historical fit based on matched capabilities diversity.
+
+    Measures client type diversity and year recency of matched capabilities.
+    """
+    if not capabilities:
+        return 0.0, "No capability data"
+
+    # Get matched cap_ids
+    matched_ids = set()
+    for match in rag_matches:
+        if match.get("record_id"):
+            matched_ids.add(match["record_id"])
+        for tm in match.get("top_matches", []):
+            if tm.get("cap_id"):
+                matched_ids.add(tm["cap_id"])
+
+    if not matched_ids:
+        return 0.0, "No matched capabilities"
+
+    matched_caps = [c for c in capabilities if c.get("cap_id") in matched_ids]
+
+    # Client type diversity (max 4 types = 50 points)
+    client_types = set(c.get("client_type", "") for c in matched_caps if c.get("client_type"))
+    client_diversity = min(len(client_types) / 4.0, 1.0) * 50
+
+    # Year recency (2025 = 50 points)
+    years = []
+    for c in matched_caps:
+        yr = c.get("year_completed")
+        if yr:
+            try:
+                years.append(int(yr))
+            except (ValueError, TypeError):
+                pass
+
+    if years:
+        max_year = max(years)
+        recency = min((max_year - 2018) / 7.0, 1.0) * 50
+    else:
+        recency = 0.0
+
+    score = client_diversity + recency
+
+    return _clamp(score), (
+        f"{len(client_types)} client types, "
+        f"most recent: {max(years) if years else 'N/A'}"
+    )
 
 
 def calculate_win_probability(
-    compliance_score: float,
-    capability_score: float,
-    experience_score: float,
-    budget_fit: float,
+    mandatory_compliance_score: float,
+    rag_matches: list[dict] = None,
+    capabilities: list[dict] = None,
 ) -> dict:
-    """Calculate win probability using the mandated weighted formula.
+    """Calculate win probability using the mandated 3-factor formula.
 
-    Formula:
-        win_probability = W_COMPLIANCE * compliance + W_CAPABILITY * capability
-                        + W_EXPERIENCE * experience + W_BUDGET * budget_fit
+    base_score = 0.60 * mandatory_score
+               + 0.20 * capability_coverage
+               + 0.20 * historical_fit
 
-    Decision:
-        >= WIN_PROBABILITY_THRESHOLD → GO
-        < WIN_PROBABILITY_THRESHOLD  → NO-GO
+    Args:
+        mandatory_compliance_score: 0-100 compliance score (mandatory only)
+        rag_matches: List of RAG match dicts (for capability coverage)
+        capabilities: List of capability records (for historical fit)
 
-    Enriched with historical bid statistics from the dataset.
+    Returns:
+        Structured result with score, decision, factors, reasoning.
     """
+    rag_matches = rag_matches or []
+    capabilities = capabilities or []
+    reasoning = []
+
+    # Validate inputs (prevent NaN/undefined)
+    mandatory_compliance_score = _clamp(mandatory_compliance_score if mandatory_compliance_score is not None else 0.0)
+    reasoning.append(f"Mandatory compliance: {mandatory_compliance_score:.1f} (weight {WEIGHT_MANDATORY})")
+
+    # Factor 2: Capability coverage (20%)
+    capability_score, capability_reason = _compute_capability_coverage(rag_matches)
+    reasoning.append(f"Capability coverage: {capability_reason} → {capability_score:.1f}")
+
+    # Factor 3: Historical fit (20%)
+    historical_score, historical_reason = _compute_historical_fit(capabilities, rag_matches)
+    reasoning.append(f"Historical fit: {historical_reason} → {historical_score:.1f}")
+
+    # Weighted sum
     win_probability = (
-        (WEIGHT_COMPLIANCE * compliance_score)
+        (WEIGHT_MANDATORY * mandatory_compliance_score)
         + (WEIGHT_CAPABILITY * capability_score)
-        + (WEIGHT_EXPERIENCE * experience_score)
-        + (WEIGHT_BUDGET_FIT * budget_fit)
+        + (WEIGHT_HISTORICAL * historical_score)
     )
-    win_probability = round(win_probability, 1)
+    win_probability = round(_clamp(win_probability), 1)
 
-    decision = "GO" if win_probability >= WIN_PROBABILITY_THRESHOLD else "NO-GO"
+    # Decision
+    if win_probability > THRESHOLD_GO:
+        decision = "GO"
+    elif win_probability >= THRESHOLD_CONDITIONAL:
+        decision = "CONDITIONAL GO"
+    else:
+        decision = "NO-GO"
 
-    # Enrich with historical context
-    stats = _get_historical_stats()
+    reasoning.append(
+        f"Final: {win_probability:.1f} → {decision}"
+    )
+
+    logger.info(
+        f"Win Probability: {win_probability}% | Decision: {decision} | "
+        f"Mandatory={mandatory_compliance_score:.1f} Capability={capability_score:.1f} "
+        f"Historical={historical_score:.1f}"
+    )
 
     return {
         "win_probability": win_probability,
         "decision": decision,
-        "historical_context": {
-            "total_bids_analyzed": stats["total_bids"],
-            "historical_win_rate": stats["win_rate"],
-            "avg_winning_score": stats["avg_win_score"],
-            "avg_winning_compliance": stats["avg_win_compliance"],
-            "avg_winning_gaps": stats["avg_win_gaps"],
+        "factors": {
+            "mandatory_compliance": round(mandatory_compliance_score, 1),
+            "capability_coverage": round(capability_score, 1),
+            "historical_fit": round(historical_score, 1),
         },
+        "reasoning": reasoning,
     }

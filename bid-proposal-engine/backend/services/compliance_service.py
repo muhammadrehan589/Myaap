@@ -1,71 +1,172 @@
-"""Compliance Service — Dataset-driven compliance checking.
+"""Compliance Service — Strict procurement intelligence scoring.
 
-Uses RAG matches against the Capability Library to determine PASS/FAIL.
-Identifies compliance gaps: missing certifications and experience areas.
+ONLY mandatory requirements count for PASS/FAIL compliance.
+
+Scoring rules:
+- similarity >= 0.75 → STRONG MATCH → PASS
+- 0.50 <= similarity < 0.75 → PARTIAL MATCH → PARTIAL
+- similarity < 0.50 → NO MATCH → FAIL
+
+Formula:
+    mandatory_score = (PASS + 0.5 * PARTIAL) / total_mandatory
+
+Preferred requirements are informational only — they do NOT affect compliance score.
 """
 
-from services.dataset_service import get_capability_records
+import logging
 
-COMPLIANCE_THRESHOLD = 0.75
+logger = logging.getLogger(__name__)
+
+# Match thresholds
+THRESHOLD_STRONG = 0.75   # PASS
+THRESHOLD_PARTIAL = 0.50  # PARTIAL
 
 
-def check_compliance(requirements: list[str], rag_matches: list[dict]) -> dict:
-    """Evaluate compliance based on RAG similarity scores against the Capability Library.
+def _determine_match_level(score: float) -> str:
+    """Determine match level from similarity score."""
+    if score >= THRESHOLD_STRONG:
+        return "STRONG"
+    elif score >= THRESHOLD_PARTIAL:
+        return "PARTIAL"
+    return "NONE"
 
-    PASS if the best RAG match score >= threshold, otherwise FAIL.
-    Identifies missing certifications and experience gaps from the dataset.
+
+def _determine_status(match_level: str, is_mandatory: bool) -> str:
+    """Determine compliance status based on match level and requirement type.
+
+    Rules:
+        - STRONG + mandatory → PASS
+        - PARTIAL + mandatory → PARTIAL
+        - NONE + mandatory → FAIL
+        - Any + preferred → informational only (WEAK/PASS)
+    """
+    if is_mandatory:
+        if match_level == "STRONG":
+            return "PASS"
+        elif match_level == "PARTIAL":
+            return "PARTIAL"
+        return "FAIL"
+    else:
+        # Preferred requirements are informational
+        if match_level == "STRONG":
+            return "PASS"
+        elif match_level == "PARTIAL":
+            return "PARTIAL"
+        return "WEAK"
+
+
+def check_compliance(
+    mandatory_requirements: list[dict],
+    preferred_requirements: list[dict],
+    rag_matches: list[dict],
+) -> dict:
+    """Evaluate compliance using strict procurement intelligence rules.
+
+    ONLY mandatory requirements affect the compliance score.
+    Preferred requirements are informational only.
+
+    Args:
+        mandatory_requirements: List of mandatory requirement dicts with 'text'
+        preferred_requirements: List of preferred requirement dicts with 'text'
+        rag_matches: Combined RAG matches for all requirements
+
+    Returns:
+        Dict with compliance_results, mandatory_score, status counts.
     """
     results = []
-    for req, match in zip(requirements, rag_matches):
-        status = "PASS" if match["score"] >= COMPLIANCE_THRESHOLD else "FAIL"
+    mandatory_pass = 0
+    mandatory_partial = 0
+    mandatory_fail = 0
+    total_mandatory = len(mandatory_requirements)
+
+    # Process mandatory requirements
+    for i, req in enumerate(mandatory_requirements):
+        req_text = req.get("text", str(req))
+        match = rag_matches[i] if i < len(rag_matches) else {
+            "score": 0.0, "record_id": "", "evidence": "No match",
+            "top_matches": [], "best_score": 0.0,
+        }
+
+        best_score = match.get("best_score", match.get("score", 0.0))
+        match_level = _determine_match_level(best_score)
+        status = _determine_status(match_level, is_mandatory=True)
+
+        if status == "PASS":
+            mandatory_pass += 1
+        elif status == "PARTIAL":
+            mandatory_partial += 1
+        else:
+            mandatory_fail += 1
+
+        logger.info(
+            f"Mandatory [{i+1}/{total_mandatory}]: "
+            f"'{req_text[:50]}...' | score={best_score:.4f} | "
+            f"match={match_level} | status={status}"
+        )
+
         results.append({
-            "requirement": req,
+            "requirement": req_text,
+            "priority": "mandatory",
+            "top_matches": match.get("top_matches", [])[:3],
+            "best_score": round(best_score, 4),
+            "match_level": match_level,
             "status": status,
-            "evidence": match["evidence"],
+            "evidence": match.get("evidence", ""),
             "record_id": match.get("record_id", ""),
         })
 
-    passed = sum(1 for r in results if r["status"] == "PASS")
-    failed = sum(1 for r in results if r["status"] == "FAIL")
-    total = len(results)
-    score = round((passed / total) * 100, 1) if total > 0 else 0
+    # Process preferred requirements (informational only)
+    offset = len(mandatory_requirements)
+    for i, req in enumerate(preferred_requirements):
+        req_text = req.get("text", str(req))
+        match_idx = offset + i
+        match = rag_matches[match_idx] if match_idx < len(rag_matches) else {
+            "score": 0.0, "record_id": "", "evidence": "No match",
+            "top_matches": [], "best_score": 0.0,
+        }
 
-    # Identify gaps from dataset
-    capabilities = get_capability_records()
-    all_domains = set(r["domain"] for r in capabilities if r["domain"])
-    matched_domains = set()
-    for m in rag_matches:
-        if m.get("record_id"):
-            for cap in capabilities:
-                if cap["cap_id"] == m["record_id"]:
-                    matched_domains.add(cap["domain"])
+        best_score = match.get("best_score", match.get("score", 0.0))
+        match_level = _determine_match_level(best_score)
+        status = _determine_status(match_level, is_mandatory=False)
 
-    missing_domains = sorted(all_domains - matched_domains)
+        logger.info(
+            f"Preferred [{i+1}/{len(preferred_requirements)}]: "
+            f"'{req_text[:50]}...' | score={best_score:.4f} | "
+            f"match={match_level} | status={status} (informational)"
+        )
 
-    # Identify failed requirements as compliance gaps
-    compliance_gaps = [
-        {"requirement": r["requirement"], "reason": "No sufficient capability match found"}
-        for r in results if r["status"] == "FAIL"
-    ]
+        results.append({
+            "requirement": req_text,
+            "priority": "preferred",
+            "top_matches": match.get("top_matches", [])[:3],
+            "best_score": round(best_score, 4),
+            "match_level": match_level,
+            "status": status,
+            "evidence": match.get("evidence", ""),
+            "record_id": match.get("record_id", ""),
+        })
 
-    # Collect certifications from matched records
-    matched_certs = set()
-    for m in rag_matches:
-        if m.get("record_id"):
-            for cap in capabilities:
-                if cap["cap_id"] == m["record_id"] and cap["certification"] != "N/A":
-                    matched_certs.add(cap["certification"])
+    # Compute mandatory compliance score
+    # mandatory_score = (PASS + 0.5 * PARTIAL) / total_mandatory
+    if total_mandatory > 0:
+        mandatory_score = round(
+            ((mandatory_pass + 0.5 * mandatory_partial) / total_mandatory) * 100, 1
+        )
+    else:
+        mandatory_score = 0.0
 
-    all_certs = set(r["certification"] for r in capabilities
-                    if r["certification"] and r["certification"] != "N/A")
-    missing_certs = sorted(all_certs - matched_certs)
+    logger.info(
+        f"Compliance: {mandatory_score}% | "
+        f"PASS={mandatory_pass} PARTIAL={mandatory_partial} FAIL={mandatory_fail} | "
+        f"mandatory={total_mandatory}"
+    )
 
     return {
-        "total": total,
-        "passed": passed,
-        "failed": failed,
-        "score": score,
+        "total_mandatory": total_mandatory,
+        "total_preferred": len(preferred_requirements),
+        "pass": mandatory_pass,
+        "partial": mandatory_partial,
+        "fail": mandatory_fail,
+        "score": mandatory_score,
         "results": results,
-        "missing_certifications": missing_certs,
-        "compliance_gaps": compliance_gaps,
     }

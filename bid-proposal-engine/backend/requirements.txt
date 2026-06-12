@@ -8,3 +8,8 @@ sentence-transformers
 pydantic
 python-dotenv
 numpy
+sqlalchemy
+psycopg2-binary
+pgvector
+openai
+groq
