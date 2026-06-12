@@ -38,16 +38,35 @@ def _generate(prompt: str) -> str:
 
 
 def _clean_json_response(raw: str) -> str:
-    """Clean markdown fences and whitespace from LLM JSON responses."""
+    """Clean markdown fences and whitespace from LLM JSON responses.
+
+    Handles truncated JSON by attempting to close unclosed brackets.
+    """
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1]
     if raw.endswith("```"):
         raw = raw.rsplit("```", 1)[0]
-    return raw.strip()
+    raw = raw.strip()
+
+    # Handle truncated JSON - try to close unclosed brackets
+    open_braces = raw.count('{') - raw.count('}')
+    open_brackets = raw.count('[') - raw.count(']')
+
+    if open_braces > 0 or open_brackets > 0:
+        logger.warning(f"JSON appears truncated: {open_braces} unclosed braces, {open_brackets} unclosed brackets")
+        # Close any incomplete string
+        if raw.count('"') % 2 != 0:
+            raw += '"'
+        # Close arrays then objects
+        raw += ']' * open_brackets
+        raw += '}' * open_braces
+
+    return raw
 
 
 # Maximum characters from RFP text sent to LLM
-RFP_TEXT_MAX_CHARS = 100000
+# Reduced to prevent response truncation and JSON parsing errors
+RFP_TEXT_MAX_CHARS = 15000
 
 
 def extract_requirements_and_entities(text: str) -> dict:

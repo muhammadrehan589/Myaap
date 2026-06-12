@@ -16,17 +16,15 @@ class ScoreRequest(BaseModel):
 
 @router.post("/score")
 async def score(req: ScoreRequest):
-    """Calculate win probability using the 4-factor weighted formula.
+    """Calculate win probability using the 3-factor weighted formula.
 
-    Factors: compliance (0.50), capability_match (0.25),
-    domain_relevance (0.15), historical_diversity (0.10).
+    Factors: mandatory_compliance (0.60), capability_coverage (0.20),
+    historical_fit (0.20).
 
-    Decision: >= 70 GO, 40-69 CONDITIONAL GO, < 40 NO-GO
+    Decision: > 70 GO, 40-70 CONDITIONAL GO, < 40 NO-GO
     """
     result = calculate_win_probability(
-        compliance_score=req.compliance_score,
-        capability_score=req.capability_score,
-        domain=req.domain,
+        mandatory_compliance_score=req.compliance_score,
         capabilities=get_capability_records(),
     )
     return result
