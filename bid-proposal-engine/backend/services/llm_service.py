@@ -73,35 +73,63 @@ def extract_requirements_and_entities(text: str) -> dict:
     """Extract and CLASSIFY all document elements into strict categories.
 
     Classification rules:
-    1. Mandatory Requirement (must / shall / required)
-    2. Preferred Requirement (should / nice-to-have)
-    3. Evaluation Criteria (scoring rules, weights)
-    4. Vendor Question (questions asked to vendor)
-    5. Pricing Question (cost fields, pricing templates)
-    6. Placeholder / Noise (e.g., "Click here to enter text")
-
-    Vendor Questions are NOT requirements.
-    Evaluation Criteria are NOT compliance items.
-    Placeholders are ignored.
+    1. Mandatory Requirement — what the vendor MUST deliver/demonstrate
+    2. Preferred Requirement — what the vendor SHOULD have
+    3. Evaluation Criteria — scoring rules, weights
+    4. Vendor Question — questions asked to vendor
+    5. Pricing Question — cost fields, pricing templates
+    6. Submission Instructions — NOT requirements (formatting, deadlines, packaging)
+    7. Placeholder / Noise — template instructions, boilerplate
     """
     prompt = f"""You are an expert procurement intelligence analyst.
 
 Your task is to parse the document and classify EACH item into EXACTLY ONE category.
 
 ===== CLASSIFICATION RULES =====
-1. Mandatory Requirement — uses words like: must, shall, required, mandatory, necessary
-2. Preferred Requirement — uses words like: should, nice-to-have, preferred, desirable
-3. Evaluation Criteria — scoring rules, weights, point systems, rating criteria
-4. Vendor Question — questions directed at the vendor (e.g., "Describe your approach to...")
-5. Pricing Question — cost fields, pricing templates, rate cards, budget forms
-6. Placeholder / Noise — "Click here to enter text", "N/A", template instructions, boilerplate
+
+1. Mandatory Requirement — What the vendor MUST deliver, demonstrate, or possess:
+   - Technical capabilities required
+   - Certifications/licenses needed
+   - Experience requirements
+   - Staffing qualifications
+   - Deliverables expected
+   EXAMPLES: "Must have ISO 27001 certification", "Minimum 5 years healthcare IT experience"
+
+2. Preferred Requirement — What the vendor SHOULD have (nice-to-have):
+   - Additional capabilities
+   - Bonus qualifications
+   EXAMPLES: "AWS experience preferred", "HIPAA compliance desirable"
+
+3. Evaluation Criteria — How proposals are scored/weighted:
+   - Scoring weights
+   - Rating criteria
+   EXAMPLES: "Technical approach: 40%", "Past performance: 30%"
+
+4. Vendor Question — Questions the vendor must answer:
+   - "Describe your approach to..."
+   - "What is your experience with..."
+
+5. Pricing Question — Cost-related fields:
+   - Rate cards
+   - Budget forms
+
+6. Submission Instructions — NOT requirements, just process/procedure:
+   - How to format the proposal
+   - Where to submit
+   - Number of copies needed
+   - Paper size, font requirements
+   - Deadline dates for submission
+   - Sealing/labeling instructions
+   EXAMPLES: "Proposals must be sealed and labeled", "Submit 3 copies", "Use Times Roman 12pt"
+
+7. Placeholder / Noise — Template boilerplate
 
 ===== CRITICAL RULES =====
-- Vendor Questions are NOT requirements
+- Submission Instructions are NOT requirements — classify them separately
 - Evaluation Criteria are NOT compliance items
-- Placeholders must be identified and ignored
-- Do NOT merge categories
-- Do NOT assume everything is a requirement
+- Do NOT extract formatting/packaging instructions as requirements
+- Only extract what the vendor MUST DELIVER or DEMONSTRATE as requirements
+- If unsure whether something is a requirement or instruction, classify as Submission Instructions
 
 Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 {{
@@ -144,6 +172,12 @@ Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
       "section": "section where found"
     }}
   ],
+  "submission_instructions": [
+    {{
+      "text": "submission instruction text",
+      "section": "section where found"
+    }}
+  ],
   "noise": [
     "placeholder or noise text identified"
   ]
@@ -160,22 +194,19 @@ Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 def generate_proposal(context: dict) -> dict:
     """Generate a structured proposal using ONLY verified dataset evidence.
 
-    Returns JSON with strict format. Every capability reference uses real
-    cap_id, domain, project_summary, certification, client_type from dataset.
-    No hallucination, no external knowledge, no invented projects.
+    Applies strict domain-aware matching rules:
+    1. Core context analysis before matching
+    2. Strict domain alignment (no naive keyword matching)
+    3. Financial/scale verification
+    4. Semantic meaning over keywords
+    5. Zero hallucination with honest gaps
 
-    Uses LLM service with automatic fallback and caching.
-
-    Args:
-        context: Dict with requirements, capability_matches (with full capability data),
-                 compliance_results, budget, deadlines, grounding_report
-
-    Returns:
-        dict with proposal sections as JSON
+    Returns JSON with strict format.
     """
     requirements = context.get("requirements", [])
     capability_matches = context.get("capability_matches", [])
     compliance_results = context.get("compliance_results", [])
+    document_type = context.get("document_type", "RFP")
 
     # Build capability evidence block with ALL dataset fields
     capability_blocks = []
@@ -209,7 +240,7 @@ def generate_proposal(context: dict) -> dict:
         for r in requirements
     )
 
-    # Build compliance mapping (EXACT output from compliance engine)
+    # Build compliance mapping
     compliance_lines = []
     for r in compliance_results:
         status = r.get("status", "UNKNOWN")
@@ -218,34 +249,47 @@ def generate_proposal(context: dict) -> dict:
         compliance_lines.append(f"- requirement: {req_text}\n  status: {status}\n  evidence: {evidence}")
     compliance_text = "\n".join(compliance_lines) if compliance_lines else "NO COMPLIANCE DATA"
 
-    prompt = f"""You are a Senior Enterprise AI Proposal Generation Engine.
+    prompt = f"""You are a Senior Bid & Proposal Manager and expert in technical compliance.
+Your task is to evaluate an RFP and draft a proposal response using ONLY the provided Capability Library dataset.
 
-===== CRITICAL RULES (NON-NEGOTIABLE) =====
-1. DO NOT invent any project, certification, company, or capability.
-2. ONLY use evidence provided in the capability records below.
-3. DO NOT generate or modify cap_id values.
-4. DO NOT use general world knowledge.
-5. If data is missing → explicitly say "NO EVIDENCE AVAILABLE".
-6. Compliance engine output is the ONLY truth source for PASS/FAIL.
+===== STEP 1: CORE CONTEXT ANALYSIS =====
+Before matching any data, identify the specific domain, scope, and scale of this RFP.
+Document type: {document_type}
+Keep this core context in mind for every decision you make.
 
-===== HARD DATA BOUNDARY =====
+===== STEP 2: STRICT MATCHING RULES (NON-NEGOTIABLE) =====
+
+RULE 1 — STRICT DOMAIN ALIGNMENT:
+Do NOT match different sub-domains just because they share a high-level keyword.
+For example:
+- If RFP asks for "Hospital IT", do NOT propose "Medical Equipment" just because both are healthcare
+- If RFP asks for "Cloud AWS", do NOT propose "Network Design" just because both are technical
+- If the exact domain is missing, declare "NO RELEVANT EVIDENCE AVAILABLE"
+
+RULE 2 — FINANCIAL & SCALE LOGIC:
+If the RFP requires past projects of a specific scale, mathematically verify the Contract Value.
+Reject any projects that do not meet the threshold.
+
+RULE 3 — SEMANTIC MEANING OVER KEYWORDS:
+For qualitative requirements, do not map random projects just because they exist.
+The capability must explicitly prove the specific trait.
+
+RULE 4 — ZERO HALLUCINATION & HONEST GAPS:
+Do NOT invent licenses, geographic proximity, or capabilities.
+It is better to have a 10% compliance score that is honest than a 90% score that is hallucinated.
+If a requirement fails contextual checks, explicitly state the gap.
+
+===== STEP 3: DATA BOUNDARIES =====
 You are ONLY allowed to use these exact fields from capability records:
-- cap_id
-- domain
-- project_summary
-- certification
-- client_type
-- year_completed
-- contract_value
+- cap_id, domain, project_summary, certification, client_type, year_completed, contract_value
 
 You are NOT allowed to:
-- create new projects
-- rename projects
-- merge projects
-- infer missing certifications
-- assume any missing field
+- Create, rename, or merge projects
+- Infer missing certifications
+- Assume any missing field
+- Use general world knowledge
 
-===== VERIFIED CAPABILITY RECORDS ({len(capability_matches)} entries from dataset) =====
+===== VERIFIED CAPABILITY RECORDS ({len(capability_matches)} entries) =====
 {capabilities_text}
 
 ===== EXTRACTED REQUIREMENTS =====
@@ -260,47 +304,49 @@ Deadline: {context.get('deadlines', 'Not specified')}
 
 ===== OUTPUT FORMAT (Return ONLY valid JSON) =====
 
-Return this exact JSON structure. No markdown, no code fences, no extra text:
-
 {{
+  "core_context": {{
+    "domain": "identified RFP domain",
+    "scope": "identified scope",
+    "scale": "identified scale/budget range"
+  }},
   "proposal": {{
-    "executive_summary": "2-3 paragraphs. ONLY reference verified capabilities by cap_id. If no capabilities exist, state NO EVIDENCE AVAILABLE.",
-    "technical_approach": "Address each requirement. ONLY cite real cap_id values from the records above. For unmatched requirements, state the gap.",
+    "executive_summary": "2-3 paragraphs. ONLY reference verified capabilities that pass strict domain alignment.",
+    "technical_approach": "Address each requirement with strict domain matching. If no valid match exists, state: 'NO RELEVANT EVIDENCE AVAILABLE in our capability library.'",
     "company_experience": [
       {{
-        "cap_id": "use EXACT cap_id from record",
-        "domain": "use EXACT domain from record",
-        "project_summary": "use EXACT project_summary from record",
-        "certification": "use EXACT certification from record",
-        "client_type": "use EXACT client_type from record",
-        "year_completed": "use EXACT year_completed from record"
+        "cap_id": "EXACT cap_id from record",
+        "domain": "EXACT domain from record",
+        "project_summary": "EXACT project_summary from record",
+        "certification": "EXACT certification from record",
+        "client_type": "EXACT client_type from record",
+        "year_completed": "EXACT year_completed from record"
       }}
     ],
     "compliance_mapping": [
       {{
         "requirement": "exact requirement text",
         "status": "PASS or FAIL from compliance engine — DO NOT change",
-        "evidence": "exact evidence from compliance engine"
+        "evidence": "exact evidence or 'NO RELEVANT EVIDENCE AVAILABLE'"
       }}
     ],
-    "conclusion": "Summarize capabilities and gaps honestly. If gaps exist, acknowledge them."
+    "conclusion": "Summarize capabilities and gaps honestly. If gaps exist, acknowledge them directly."
   }}
 }}
 
 ===== COMPANY EXPERIENCE RULE =====
-For EVERY experience mention, you MUST use the exact format above with real cap_id.
-DO NOT fabricate "Project 1, Project 42, etc." — ONLY use real cap_id from dataset.
-If no capabilities are available, return an empty array: "company_experience": []
+For EVERY experience mention, you MUST use the exact format with real cap_id.
+DO NOT fabricate projects. ONLY use real cap_id from dataset.
+If no capabilities pass strict domain alignment, return empty array: "company_experience": []
 
-===== COMPLIANCE SECTION RULE =====
+===== COMPLIANCE RULE =====
 Use compliance engine output EXACTLY. Do NOT override FAIL to PASS.
-If requirement is FAIL, state FAIL clearly. Do NOT justify it as PASS.
+If requirement is FAIL, state FAIL clearly with honest explanation.
 
 ===== LANGUAGE RULE =====
 - Formal, enterprise-grade language
-- Do NOT over-explain contradictions
-- Do NOT add defensive statements about "tool limitations"
 - Be direct and professional
+- An honest FAIL is better than a hallucinated PASS
 
 Return ONLY the JSON object. No markdown fences, no extra text."""
 

@@ -149,7 +149,7 @@ def get_evaluation_taxonomy() -> dict:
 def get_capability_text(record: dict) -> str:
     """Build a natural-language text representation for embedding.
 
-    Uses sentence structure instead of metadata format to improve
+    Uses sentence structure with domain-specific vocabulary to improve
     semantic similarity with requirement text from RFPs.
     """
     domain = record.get("domain", "")
@@ -158,8 +158,27 @@ def get_capability_text(record: dict) -> str:
     client = record.get("client_type", "")
     year = record.get("year_completed", "")
 
-    # Build natural language sentence for better embedding quality
+    # Domain-specific vocabulary enrichment
+    domain_context = {
+        "Cybersecurity": "security compliance information protection data privacy risk management",
+        "Hospital IT": "healthcare medical clinical hospital systems patient records HIPAA",
+        "Cloud Infrastructure": "cloud computing AWS Azure deployment scalable infrastructure",
+        "Network Design": "network architecture infrastructure connectivity telecommunications",
+        "Medical Equipment": "medical devices healthcare equipment clinical systems HIPAA compliance",
+        "ERP Implementation": "enterprise resource planning business systems integration",
+        "LMS Development": "learning management system education training platform",
+        "Mobile Banking": "fintech mobile banking financial services digital payments",
+        "Road Construction": "civil engineering construction infrastructure roads highways",
+        "Bridge Engineering": "structural engineering bridge construction infrastructure",
+        "Fleet Management": "logistics fleet vehicle management tracking operations",
+        "Solar Energy": "renewable energy solar power sustainability green technology",
+    }
+
+    # Build enriched text with domain vocabulary
+    context = domain_context.get(domain, "")
     text = f"This is a {domain} project. {summary}."
+    if context:
+        text += f" Relevant expertise includes: {context}."
     if cert and cert != "N/A":
         text += f" The team holds {cert} certification."
     if client:

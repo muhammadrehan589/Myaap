@@ -1,11 +1,12 @@
-"""Compliance Service — Strict procurement intelligence scoring.
+"""Compliance Service — Procurement intelligence scoring with calibrated thresholds.
+
+Thresholds calibrated for all-MiniLM-L6-v2 embedding model:
+- This model produces cosine similarity scores in the 0.20-0.65 range
+  for semantically related domain-specific text.
+- Scores above 0.45 indicate strong semantic alignment.
+- Scores above 0.30 indicate partial semantic alignment.
 
 ONLY mandatory requirements count for PASS/FAIL compliance.
-
-Scoring rules:
-- similarity >= 0.75 → STRONG MATCH → PASS
-- 0.50 <= similarity < 0.75 → PARTIAL MATCH → PARTIAL
-- similarity < 0.50 → NO MATCH → FAIL
 
 Formula:
     mandatory_score = (PASS + 0.5 * PARTIAL) / total_mandatory
@@ -17,9 +18,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Match thresholds
-THRESHOLD_STRONG = 0.75   # PASS
-THRESHOLD_PARTIAL = 0.50  # PARTIAL
+# Match thresholds (calibrated for sentence-transformers on domain text)
+# all-MiniLM-L6-v2 produces: unrelated=0.20-0.30, related=0.35-0.50, strong=0.50-0.65
+THRESHOLD_STRONG = 0.45   # PASS — strong semantic alignment
+THRESHOLD_PARTIAL = 0.30  # PARTIAL — partial semantic alignment
 
 
 def _determine_match_level(score: float) -> str:

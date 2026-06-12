@@ -36,7 +36,7 @@
           <div class="logo-container" :class="{ 'active': showIcon }">
             <div class="logo-ring">
               <div class="logo-inner">
-                <svg class="w-12 h-12 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <svg class="w-12 h-12 text-black-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
@@ -215,22 +215,22 @@ onUnmounted(() => {
   z-index: 100;
   cursor: pointer;
   overflow: hidden;
-  background: #d2d3db;
+  background: #ffffff;
 }
 
 /* Parallax gradient layers */
 .splash-gradient-base {
   background:
-    radial-gradient(ellipse at 25% 45%, rgba(200, 169, 110, 0.12) 0%, transparent 55%),
-    radial-gradient(ellipse at 75% 25%, rgba(200, 169, 110, 0.08) 0%, transparent 45%),
-    linear-gradient(180deg, #d2d3db 0%, #c8c9d2 40%, #d2d3db 100%);
+    radial-gradient(ellipse at 25% 45%, rgba(200, 169, 110, 0.08) 0%, transparent 55%),
+    radial-gradient(ellipse at 75% 25%, rgba(200, 169, 110, 0.05) 0%, transparent 45%),
+    linear-gradient(180deg, #ffffff 0%, #fafafa 40%, #ffffff 100%);
   transition: transform 0.15s linear;
 }
 
 .splash-gradient-glow {
   background:
-    radial-gradient(circle at 35% 45%, rgba(200, 169, 110, 0.08) 0%, transparent 45%),
-    radial-gradient(circle at 65% 55%, rgba(200, 169, 110, 0.06) 0%, transparent 35%);
+    radial-gradient(circle at 35% 45%, rgba(200, 169, 110, 0.06) 0%, transparent 45%),
+    radial-gradient(circle at 65% 55%, rgba(200, 169, 110, 0.04) 0%, transparent 35%);
   transition: transform 0.1s linear;
 }
 
@@ -303,8 +303,11 @@ onUnmounted(() => {
 
 .hero-tilt {
   position: relative;
-  width: 700px;
-  max-width: 90vw;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: transform 0.08s linear;
   transform-style: preserve-3d;
   will-change: transform;
@@ -313,28 +316,24 @@ onUnmounted(() => {
 /* Glowing edge that follows mouse */
 .hero-glow-edge {
   position: absolute;
-  inset: -2px;
-  border-radius: 24px;
+  inset: 0;
   z-index: 0;
-  opacity: 0.8;
+  opacity: 0.6;
   transition: background 0.1s linear;
 }
 
-/* Hero card surface */
+/* Hero card surface — full screen with centered content */
 .hero-surface {
   position: relative;
   z-index: 1;
-  background: rgba(26, 21, 16, 0.8);
-  backdrop-filter: blur(30px);
-  -webkit-backdrop-filter: blur(30px);
-  border: 1px solid rgba(200, 169, 110, 0.15);
-  border-radius: 24px;
-  padding: 60px 48px;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  box-shadow:
-    0 0 60px rgba(0, 0, 0, 0.5),
-    0 0 120px rgba(200, 169, 110, 0.06),
-    inset 0 1px 0 rgba(200, 169, 110, 0.05);
+  background: transparent;
 }
 
 /* Logo */
@@ -416,6 +415,7 @@ onUnmounted(() => {
   filter: blur(8px);
   transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
   color: #000000;
+  font-weight: 900;
 }
 
 .title-word.active {
@@ -426,7 +426,8 @@ onUnmounted(() => {
 
 .title-word.gold {
   color: #c8a96e;
-  text-shadow: 0 0 30px rgba(200, 169, 110, 0.4);
+  font-weight: 900;
+  text-shadow: 0 0 40px rgba(200, 169, 110, 0.5);
 }
 
 .title-word.accent {
@@ -456,17 +457,17 @@ onUnmounted(() => {
 
 .divider-line {
   width: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(200, 169, 110, 0.5));
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #c8a96e);
   transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .divider-line.left {
-  background: linear-gradient(90deg, transparent, rgba(200, 169, 110, 0.5));
+  background: linear-gradient(90deg, transparent, #c8a96e);
 }
 
 .divider-line.right {
-  background: linear-gradient(90deg, rgba(200, 169, 110, 0.5), transparent);
+  background: linear-gradient(90deg, #c8a96e, transparent);
 }
 
 .divider-container.active .divider-line {
@@ -474,11 +475,11 @@ onUnmounted(() => {
 }
 
 .divider-diamond {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   background: #c8a96e;
   transform: rotate(45deg);
-  box-shadow: 0 0 10px rgba(200, 169, 110, 0.5);
+  box-shadow: 0 0 15px rgba(200, 169, 110, 0.6);
 }
 
 /* Tagline */
@@ -496,9 +497,9 @@ onUnmounted(() => {
 
 .tagline {
   font-size: 1.125rem;
-  color: rgba(200, 169, 110, 0.5);
+  color: #b8944d;
   letter-spacing: 0.08em;
-  font-weight: 400;
+  font-weight: 600;
 }
 
 /* Loading */
@@ -533,11 +534,12 @@ onUnmounted(() => {
 }
 
 .loading-text {
-  font-size: 0.7rem;
-  color: rgba(200, 169, 110, 0.4);
+  font-size: 0.75rem;
+  color: #b8944d;
   text-align: center;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  font-weight: 600;
 }
 
 /* Skip hint */
@@ -557,10 +559,11 @@ onUnmounted(() => {
 }
 
 .skip-hint p {
-  font-size: 0.7rem;
-  color: rgba(200, 169, 110, 0.3);
+  font-size: 0.75rem;
+  color: #b8944d;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  font-weight: 600;
 }
 
 @keyframes hintPulse {

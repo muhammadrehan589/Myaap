@@ -2,8 +2,8 @@
   <AppLayout>
     <!-- Generating state -->
     <div v-if="isGenerating" class="text-center py-20 animate-fade-in">
-      <div class="w-20 h-20 bg-primary-600/20 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-primary-500/20 animate-glow-pulse">
-        <svg class="animate-spin w-10 h-10 text-primary-400" fill="none" viewBox="0 0 24 24">
+      <div class="w-20 h-20 bg-primary-400/15 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-primary-400/20 animate-glow-pulse">
+        <svg class="animate-spin w-10 h-10 text-black" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
         </svg>
@@ -47,7 +47,7 @@
       <div class="flex items-center justify-between mb-6">
         <div>
           <h2 class="text-xl font-bold text-black">AI Generated Proposal</h2>
-          <p class="text-sm text-black mt-1">Generated on {{ state.proposal.date }}</p>
+          <p class="text-sm text-black hover:text-black cursor-pointer transition-colors mt-1">Generated on {{ state.proposal.date }}</p>
         </div>
         <div class="flex items-center gap-3">
           <button @click="copyProposal" class="btn-secondary group">
@@ -74,15 +74,15 @@
       <!-- Regenerating overlay -->
       <div v-if="isRegenerating" class="card mb-6 animate-slide-up">
         <div class="flex items-center gap-4">
-          <div class="w-10 h-10 bg-primary-600/20 rounded-full flex items-center justify-center border border-primary-500/30">
-            <svg class="animate-spin w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24">
+          <div class="w-10 h-10 bg-primary-400/15 rounded-full flex items-center justify-center border border-primary-400/20">
+            <svg class="animate-spin w-5 h-5 text-black" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
             </svg>
           </div>
           <div>
             <p class="font-medium text-black">AI is regenerating the proposal...</p>
-            <p class="text-sm text-black">This may take a few moments</p>
+            <p class="text-sm text-black hover:text-black cursor-pointer transition-colors">This may take a few moments</p>
           </div>
         </div>
       </div>
@@ -91,21 +91,21 @@
       <div class="card-elevated" id="proposal-document">
         <!-- Document Header -->
         <div class="text-center border-b border-white/[0.06] pb-8 mb-8">
-          <div class="w-16 h-16 bg-gradient-to-br from-primary-600 to-accent-cyan rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-glow-md">
+          <div class="w-16 h-16 bg-gradient-to-br from-primary-600 to-primary-400 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-glow-md">
             <svg class="w-8 h-8 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           </div>
           <h1 class="text-2xl font-bold text-black">{{ state.proposal.title }}</h1>
           <p class="text-black mt-2">{{ state.proposal.subtitle }}</p>
-          <p class="text-sm text-black mt-1">{{ state.proposal.date }}</p>
+          <p class="text-sm text-black hover:text-black cursor-pointer transition-colors mt-1">{{ state.proposal.date }}</p>
         </div>
 
         <!-- Table of Contents -->
         <div class="mb-8 p-4 bg-surface-800/40 rounded-xl border border-white/[0.04]">
           <h4 class="text-xs font-semibold text-black uppercase tracking-wider mb-3">Table of Contents</h4>
           <ol class="space-y-1">
-            <li v-for="(section, index) in state.proposal.sections" :key="index" class="text-sm text-primary-400 hover:text-primary-300 cursor-pointer transition-colors">
+            <li v-for="(section, index) in state.proposal.sections" :key="index" class="text-sm text-black hover:text-black cursor-pointer transition-colors hover:text-black cursor-pointer transition-colors">
               {{ index + 1 }}. {{ section.heading }}
             </li>
           </ol>
@@ -121,7 +121,7 @@
           >
             <div class="flex items-center justify-between mb-4">
               <h2 class="text-xl font-bold text-black flex items-center gap-3">
-                <span class="w-8 h-8 bg-gradient-to-br from-primary-600/20 to-accent-cyan/20 text-primary-400 rounded-lg flex items-center justify-center text-sm font-bold border border-primary-500/20">
+                <span class="w-8 h-8 bg-gradient-to-br from-primary-400/15 to-primary-300/15 text-black rounded-lg flex items-center justify-center text-sm font-bold border border-primary-400/20">
                   {{ index + 1 }}
                 </span>
                 {{ section.heading }}
@@ -162,7 +162,7 @@
         </div>
 
         <!-- Document Footer -->
-        <div class="mt-12 pt-8 border-t border-white/[0.06] text-center text-sm text-black">
+        <div class="mt-12 pt-8 border-t border-white/[0.06] text-center text-sm text-black hover:text-black cursor-pointer transition-colors">
           <p>This proposal was generated by BidEngine AI — {{ state.proposal.date }}</p>
           <p class="mt-1 text-surface-700">Confidential — For authorized recipients only</p>
         </div>

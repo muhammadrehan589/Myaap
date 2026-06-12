@@ -126,7 +126,7 @@
               :style="{ animationDelay: (fIndex * 60 + 300) + 'ms' }">
               <div class="flex items-center justify-between text-sm mb-1">
                 <span class="text-black">{{ factor.name }}</span>
-                <span class="font-bold text-surface-200">{{ factor.score }}%</span>
+                <span class="font-bold text-black">{{ factor.score }}%</span>
               </div>
               <div class="w-full bg-surface-800 rounded-full h-1.5 overflow-hidden">
                 <div class="h-1.5 rounded-full transition-all duration-1000 ease-out"

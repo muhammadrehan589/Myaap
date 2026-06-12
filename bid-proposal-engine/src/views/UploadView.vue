@@ -95,7 +95,7 @@
           <div class="flex items-center gap-4">
             <div class="flex-shrink-0">
               <div class="w-10 h-10 rounded-full border border-primary-500/30 flex items-center justify-center animate-glow-pulse">
-                <svg class="animate-spin w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24">
+                <svg class="animate-spin w-5 h-5 text-black-400" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                 </svg>
@@ -231,9 +231,7 @@ async function uploadFile() {
 /* Portal/Gate card style */
 .card-portal {
   position: relative;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.85);
   border: 1px solid rgba(200, 169, 110, 0.2);
   border-radius: 1rem;
   padding: 2rem;

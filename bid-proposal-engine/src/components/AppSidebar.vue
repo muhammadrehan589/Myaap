@@ -81,9 +81,7 @@ const navItems = [
   display: flex;
   flex-direction: column;
   z-index: 30;
-  background: rgba(210, 211, 219, 0.95);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(210, 211, 219, 0.98);
   border-right: 1px solid rgba(200, 169, 110, 0.15);
 }
 
