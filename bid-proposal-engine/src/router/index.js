@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import SplashView from '../views/SplashView.vue'
 import UploadView from '../views/UploadView.vue'
 import DashboardView from '../views/DashboardView.vue'
 import ProposalView from '../views/ProposalView.vue'
@@ -7,9 +6,7 @@ import ProposalView from '../views/ProposalView.vue'
 const routes = [
   {
     path: '/',
-    name: 'Splash',
-    component: SplashView,
-    meta: { title: 'BidEngine' },
+    redirect: '/upload',
   },
   {
     path: '/upload',
