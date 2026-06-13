@@ -29,25 +29,18 @@ _indexed = False
 
 
 def _get_embedding_model():
-    """Lazy-load the sentence-transformer model (local cache only)."""
+    """Lazy-load the sentence-transformer model."""
     global _embedding_model
     if _embedding_model is None:
-        os.environ["HF_HUB_OFFLINE"] = "1"
-        os.environ["TRANSFORMERS_OFFLINE"] = "1"
-
         from sentence_transformers import SentenceTransformer
 
         try:
             _embedding_model = SentenceTransformer("all-MiniLM-L6-v2", local_files_only=True)
             logger.info("Loaded embedding model from local cache")
         except Exception as e:
-            logger.warning(f"Local cache load failed: {e}, trying with network...")
-            try:
-                _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-                logger.info("Loaded embedding model from network")
-            except Exception as e2:
-                logger.error(f"Failed to load embedding model: {e2}")
-                raise RuntimeError(f"Cannot load embedding model: {e2}")
+            logger.warning(f"Local cache load failed: {e}, downloading...")
+            _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+            logger.info("Loaded embedding model from network")
     return _embedding_model
 
 

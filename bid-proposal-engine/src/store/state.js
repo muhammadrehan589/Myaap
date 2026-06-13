@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 
-const API_BASE = 'http://localhost:8001'
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8001'
 const DEFAULT_COMPANY_NAME = 'TechCorp Solutions'
 const DEFAULT_STATUS = 'Under Review'
 const DEFAULT_AGENCY = 'Auto-detected'

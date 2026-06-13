@@ -1,10 +1,6 @@
 import os
 import logging
 
-# Force offline mode for HuggingFace before any imports
-os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -16,6 +12,12 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# Configurable CORS origins for production deployment
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://localhost:3001,http://localhost:5173"
+).split(",")
+
 app = FastAPI(
     title="Bid & Proposal Response Engine",
     description="AI-powered RFP analysis, compliance checking, and proposal generation",
@@ -24,7 +26,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
